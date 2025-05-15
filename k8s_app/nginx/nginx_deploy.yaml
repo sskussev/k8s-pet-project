@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+  namespace: nginx-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-nginx #Фильтр, по которому деплоймент находит поды
+  template:
+    metadata:
+      labels:
+        app: my-nginx #Лейблы, которые присваиваются создаваемым этим деплойментом подам
+      annotations:
+        prometheus.io/scrape: "true"  # Говорит VM Agent, что этот под нужно мониторить
+        prometheus.io/port: "9113"    # Указывает VM Agent порт, с которого брать метрики (nginx-exporter)
+        prometheus.io/path: "/metrics"  # Указывает VM Agent путь, где экспортер отдаёт метрики
+
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+          - containerPort: 80
+        volumeMounts:
+          - name: nginx-config
+            mountPath: /etc/nginx/nginx.conf  # Куда в контейнере будет монтироваться файл
+            subPath: nginx.conf  # Какой именно файл из ConfigMap использовать
+
+      - name: nginx-exporter  # Имя контейнера (будет запущен внутри пода)
+        image: nginx/nginx-prometheus-exporter:0.10.0  
+        args:
+          - "-nginx.scrape-uri=http://localhost/metrics"  # Откуда брать данные (из пода Nginx)
+        ports:
+          - containerPort: 9113  # Экспортер отдает метрики по этому порту (сюда и придет VM agent)
+        resources:
+          limits:
+            memory: 128Mi 
+            cpu: 500m  
+
+      volumes:
+      - name: nginx-config  # Создаём том с конфигурацией Nginx
+        configMap:
+          name: my-nginx-config  # Берём данные из ConfigMap с именем my-nginx-config

@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-nginx-ingress
+  namespace: nginx-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # cert-manager.io/cluster-issuer: my-clusterissuer-stg
+spec:
+  ingressClassName: nginx
+  # tls: #работает только на реальном домене
+  # - hosts:
+  #   - my-nginx.example.com  # домен должен существовать, а то будет ошибка создания секрета tls 
+  #   secretName: my-nginx-app-tls  
+  rules: #работает, если в /etc/hosts прописать <LB_IP> domain.name
+    - host: my-nginx.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-nginx-service
+                port:
+                  number: 80

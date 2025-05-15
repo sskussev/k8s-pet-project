@@ -1,0 +1,84 @@
+# Victoria Logs Single (сервер хранения логов)
+server:
+  ports:
+    loki:
+      port: 3100
+
+  replicaCount: 1
+
+  # Пример: храним логи 7 дней (можно 30d, 1y и т.д.)
+  retentionPeriod: 7d
+
+
+  service:
+    enabled: true
+    ports:
+      - name: http
+        port: 9428
+        targetPort: http
+
+
+  persistentVolume:
+    enabled: false
+  # persistentVolume:
+  #   enabled: true
+  #   size: 10Gi
+    # storageClassName: Если оставить пустым, PVC возьмёт StorageClass по умолчанию
+
+# Vector (аналог  Promtail)
+vector:
+  enabled: true  
+  role: Agent
+  dataDir: /vector-data-dir  # Директория для служебных данных Vector (буферы и т.п.)
+  service:
+    enabled: false
+
+  # default config Vector:
+  # (По умолчанию чарт подставляет шаблон с sink "vlogs",
+  customConfig:
+    data_dir: /vector-data-dir
+    api:
+      enabled: false
+      address: 0.0.0.0:8686
+      playground: true
+
+    # 1) Источники (sources) – откуда брать логи
+    sources:
+      # Системные метрики самого Vector 
+      internal_metrics:
+        type: internal_metrics
+      # Сбор логов из подов Kubernetes
+      k8s:
+        type: kubernetes_logs
+
+    # 2) Промежуточные преобразования 
+    transforms:
+      parser:
+        type: remap
+        inputs: [k8s]
+        source: |
+          .log = parse_json(.message) ?? .message
+          del(.message)
+
+    # 3) Конечные приёмники (sinks) – куда отправляем логи
+    sinks:
+      # отправка логов в Victoria Logs
+      vlogs:
+        type: elasticsearch
+        api_version: v8
+        compression: gzip
+        # Чарт внутри подставит адрес Victoria Logs
+        endpoints: << include "vlogs.es.urls" . >>
+        healthcheck:
+          enabled: false
+        inputs: [parser]
+        mode: bulk
+        request:
+          # Заголовки, которые подсказывают Victoria Logs,
+          # где искать сообщение, временную метку и т.д.
+          headers:
+            VL-Time-Field: timestamp
+            VL-Stream-Fields: stream,kubernetes.pod_name,kubernetes.container_name,kubernetes.pod_namespace
+            VL-Msg-Field: message,msg,_msg,log.msg,log.message,log
+            AccountID: "0"
+            ProjectID: "0"

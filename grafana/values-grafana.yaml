@@ -1,0 +1,59 @@
+service:
+  type: ClusterIP
+  port: 3000  
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "200m"
+    memory: "512Mi"
+
+grafana.ini:
+  server:
+    root_url: "http://grafana.example.com"  #  url графаны (в настройках самой графаны)
+
+plugins:
+  - victoriametrics-logs-datasource
+  
+ingress:
+  enabled: true
+  ingressClassName: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # cert-manager.io/cluster-issuer: my-clusterissuer-stg
+  hosts:
+    - grafana.example.com  
+
+  path: /
+  pathType: Prefix
+
+  # tls:  
+  #   - hosts:
+  #       - grafana.example.com
+  #     secretName: grafana-tls
+
+# Подключение Data Sources
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      # Подключаем Metrics из VictoriaMetrics Single  (Prometheus API)
+      - name: "VM-Prometheus"
+        type: prometheus
+        url: "http://vm-single-victoria-metrics-single-server.vm-monitoring.svc.cluster.local:8428"
+        access: proxy #Grafana сама будет делать запросы к источнику данных
+        isDefault: true # Этот источник будет выбран по умолчанию в Grafana.
+        jsonData:
+          timeInterval: "5s"
+
+      # Подключаем Logs из Victoria Logs (Elasticsearch API)
+      - name: "VM-Logs"
+        type:  victoriametrics-logs-datasource
+        access: proxy #Grafana сама будет делать запросы к источнику данных
+        url: "http://vm-logs-vector-victoria-logs-single-server.vm-logs-vector.svc.cluster.local:9428"
+        isDefault: false
+
+persistence:
+  enabled: false
